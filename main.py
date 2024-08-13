@@ -23,7 +23,7 @@ class App(tk.Tk):
 
 		self.control_pannel.on_path_toggled.add(self.on_solution_button_clicked)
 		self.control_pannel.on_step_clicked.add(self.on_step_button_clicked)
-		self.control_pannel.on_size_changed.add(self.on_size_changed)
+		self.control_pannel.on_maze_size_changed.add(self.on_maze_size_changed)
 
 	def focus_fix(self) -> None:
 		x, y = self.winfo_pointerxy()
@@ -47,7 +47,7 @@ class App(tk.Tk):
 		for _ in range(nb_steps):
 			self.maze.step()
 
-	def on_size_changed(self, size: Vector2i) -> None:
+	def on_maze_size_changed(self, size: Vector2i) -> None:
 		self.maze.resize(size)
 
 
@@ -98,12 +98,12 @@ class ControlPanel(tk.Frame):
 		self.__path_button.pack(side='left', padx=(20, 0))
 
 		self.__step_spinbox["command"] = lambda: self.__on_spinbox_leave(self.__step_spinbox)
-		self.__x_spinbox["command"] = lambda: [self.__on_spinbox_leave(self.__x_spinbox), self.__on_size_changed()]
-		self.__y_spinbox["command"] = lambda: [self.__on_spinbox_leave(self.__y_spinbox), self.__on_size_changed()]
+		self.__x_spinbox["command"] = lambda: [self.__on_spinbox_leave(self.__x_spinbox), self.__on_maze_size_changed()]
+		self.__y_spinbox["command"] = lambda: [self.__on_spinbox_leave(self.__y_spinbox), self.__on_maze_size_changed()]
 		self.__path_button["command"] = self.__on_path_toggled
 		self.__step_button["command"] = self.__on_step_clicked
 
-		self.on_size_changed = set()
+		self.on_maze_size_changed = set()
 		self.on_step_clicked = set()
 		self.on_path_toggled = set()
 
@@ -112,14 +112,14 @@ class ControlPanel(tk.Frame):
 		for func in self.on_step_clicked:
 			func(nb_steps)
 
-	def __on_size_changed(self):
+	def __on_maze_size_changed(self):
 		# old_size == new_size -> don't send event
 		for widget in [self.__x_spinbox, self.__y_spinbox]:
 			if self.__last_spinbox_values[widget] == widget.get():
 				return
 		# new_size != old_size -> send event
 		new_size = Vector2i(int(self.__x_spinbox.get()), int(self.__y_spinbox.get()))
-		for func in self.on_size_changed:
+		for func in self.on_maze_size_changed:
 			func(new_size)
 
 	def __on_path_toggled(self):
@@ -127,7 +127,7 @@ class ControlPanel(tk.Frame):
 		for func in self.on_path_toggled:
 			func(is_toggled)
 
-	def __spinbox_event_handler(self, current_text, event_type, widget_name):
+	def __spinbox_event_handler(self, current_text: str, event_type, widget_name) -> bool:
 		widget = self.nametowidget(widget_name)
 		if event_type in ['focusin', 'forced']:
 			self.__last_spinbox_values[widget] = current_text
@@ -223,8 +223,6 @@ class Maze(tk.Canvas):
 			self.remove_edge(position, connexion)
 
 	def remove_origin(self, position: Vector2i) -> None:
-		if position not in self.__origins:
-			return
 		color = self.settings.path_nodes_color if position in self.__solution_extremities else self.settings.node_color
 		self.__recolor_node(self.__get_graphical_node(position), color)
 		self.__origins.discard(position)
