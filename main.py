@@ -54,7 +54,7 @@ class App(tk.Tk):
 class ControlPanel(tk.Frame):
 	def __init__(self, master: App):
 		super(ControlPanel, self).__init__(master)
-		self.__last_values = {}
+		self.__last_spinbox_values = {}
 		# %d = Type of action (1=insert, 0=delete, -1 for others)
 		# %i = index of char string to be inserted/deleted, or -1
 		# %P = value of the entry if the edit is allowed
@@ -63,11 +63,11 @@ class ControlPanel(tk.Frame):
 		# %v = the type of validation that is currently set
 		# %V = the type of validation that triggered the callback (key, focusin, focusout, forced)
 		# %W = the tk name of the widget
-		self.spinboxevent = (self.register(self.__spinbox_event_handler), '%s', '%V', '%W')
+		self.__spinbox_checker = (self.register(self.__spinbox_event_handler), '%s', '%V', '%W')
 		spinbox_cnf = {
 			"width": 3,
 			"validate": 'all',
-			"validatecommand": self.spinboxevent
+			"validatecommand": self.__spinbox_checker
 		}
 
 		self.__step_label = tk.Label(self, text='Steps')
@@ -115,7 +115,7 @@ class ControlPanel(tk.Frame):
 	def __on_size_changed(self):
 		# old_size == new_size -> don't send event
 		for widget in [self.__x_spinbox, self.__y_spinbox]:
-			if self.__last_values[widget] == widget.get():
+			if self.__last_spinbox_values[widget] == widget.get():
 				return
 		# new_size != old_size -> send event
 		new_size = Vector2i(int(self.__x_spinbox.get()), int(self.__y_spinbox.get()))
@@ -130,7 +130,7 @@ class ControlPanel(tk.Frame):
 	def __spinbox_event_handler(self, current_text, event_type, widget_name):
 		widget = self.nametowidget(widget_name)
 		if event_type in ['focusin', 'forced']:
-			self.__last_values[widget] = current_text
+			self.__last_spinbox_values[widget] = current_text
 		elif event_type == 'focusout':
 			self.__on_spinbox_leave(widget)
 		return True
@@ -139,7 +139,7 @@ class ControlPanel(tk.Frame):
 		text = widget.get()
 		if not (text and text.isdigit() and widget.cget('from') <= int(text) <= widget.cget('to')):
 			widget.delete(0, tk.END)
-			widget.insert(tk.END, self.__last_values[widget])
+			widget.insert(tk.END, self.__last_spinbox_values[widget])
 
 
 class Maze(tk.Canvas):
