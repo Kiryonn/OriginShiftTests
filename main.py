@@ -16,21 +16,16 @@ class App(tk.Tk):
 		self.control_pannel.place(x=0, y=0, relwidth=1, height=50)
 		self.maze.place(x=0, y=50, relwidth=1, relheight=1)
 
-		self.control_pannel.step_button['command'] = self.on_step_button_clicked
 		self.config(width=512, height=512)
 
 		self.bind("<Button-1>", self.click_event)
 		self.last_focused = self
 
-		self.control_pannel.path_button['command'] = self.on_solution_button_clicked
+		self.control_pannel.on_path_toggled.add(self.on_solution_button_clicked)
+		self.control_pannel.on_step_clicked.add(self.on_step_button_clicked)
+		self.control_pannel.on_size_changed.add(self.on_size_changed)
 
-	def on_solution_button_clicked(self):
-		if self.control_pannel.path_button.cget("value"):
-			self.maze.show_solution()
-		else:
-			self.maze.hide_solution()
-
-	def click_event(self, event):
+	def click_event(self, event) -> None:
 		x, y = self.winfo_pointerxy()
 		widget = self.winfo_containing(x, y)
 		if widget != self.last_focused:
@@ -42,11 +37,17 @@ class App(tk.Tk):
 			else:
 				self.last_focused = widget
 
-	def on_step_button_clicked(self):
-		for _ in range(int(self.control_pannel.step_spinbox.get())):
+	def on_solution_button_clicked(self, is_toggled: bool) -> None:
+		if is_toggled:
+			self.maze.show_solution()
+		else:
+			self.maze.hide_solution()
+
+	def on_step_button_clicked(self, nb_steps: int) -> None:
+		for _ in range(nb_steps):
 			self.maze.step()
 
-	def on_controls_maze_size_changed(self, size: Vector2i):
+	def on_size_changed(self, size: Vector2i) -> None:
 		self.maze.resize(size)
 
 
@@ -63,7 +64,7 @@ class ControlPanel(tk.Frame):
 		# %v = the type of validation that is currently set
 		# %V = the type of validation that triggered the callback (key, focusin, focusout, forced)
 		# %W = the tk name of the widget
-		self.spinboxevent = (self.register(self.spinbox_event_handler), '%s', '%V', '%W')
+		self.spinboxevent = (self.register(self.__spinbox_event_handler), '%s', '%V', '%W')
 		spinbox_cnf = {
 			"width": 3,
 			"validate": 'all',
@@ -71,8 +72,8 @@ class ControlPanel(tk.Frame):
 		}
 
 		self.__step_label = tk.Label(self, text='Steps')
-		self.step_spinbox = tk.Spinbox(self, spinbox_cnf, from_=1, to=1000, width=4)
-		self.step_button = tk.Button(self, text='➤')
+		self.__step_spinbox = tk.Spinbox(self, spinbox_cnf, from_=1, to=1000, width=4)
+		self.__step_button = tk.Button(self, text='➤')
 		self.__size_label = tk.Label(self, text='Size')
 		self.__x_spinbox = tk.Spinbox(
 			self, spinbox_cnf,
@@ -84,36 +85,62 @@ class ControlPanel(tk.Frame):
 			from_=3, to=100,
 			textvariable=tk.IntVar(value=BASE_MAZE_SIZE.y)
 		)
-		self.path_button = tk.Checkbutton(self, text='🧭', justify='center', anchor='center')
+		self.__path_button_variable = tk.BooleanVar()
+		self.__path_button = tk.Checkbutton(
+			self, text='🧭', justify='center', anchor='center', variable=self.__path_button_variable
+		)
 
 		self.__step_label.pack(side='left', padx=(5, 0))
-		self.step_spinbox.pack(side='left', padx=(5, 0))
-		self.step_button.pack(side='left', padx=(5, 0))
+		self.__step_spinbox.pack(side='left', padx=(5, 0))
+		self.__step_button.pack(side='left', padx=(5, 0))
 		self.__size_label.pack(side='left', padx=(20, 0))
 		self.__x_spinbox.pack(side='left', padx=(5, 0))
 		self.__y_spinbox.pack(side='left', padx=(5, 0))
-		self.path_button.pack(side='left', padx=(20, 0))
+		self.__path_button.pack(side='left', padx=(20, 0))
 
-		self.step_spinbox["command"] = lambda: self.on_spinbox_leave(self.step_spinbox)
-		self.__x_spinbox["command"] = lambda: self.on_spinbox_leave(self.__x_spinbox)
-		self.__y_spinbox["command"] = lambda: self.on_spinbox_leave(self.__y_spinbox)
+		self.__step_spinbox["command"] = lambda: self.__on_spinbox_leave(self.__step_spinbox)
+		self.__x_spinbox["command"] = lambda: [self.__on_spinbox_leave(self.__x_spinbox), self.__on_size_changed()]
+		self.__y_spinbox["command"] = lambda: [self.__on_spinbox_leave(self.__y_spinbox), self.__on_size_changed()]
+		self.__path_button["command"] = self.__on_path_toggled
+		self.__step_button["command"] = self.__on_step_clicked
 
-	def spinbox_event_handler(self, current_text, event_type, widget_name):
+		self.on_size_changed = set()
+		self.on_step_clicked = set()
+		self.on_path_toggled = set()
+
+	def __on_step_clicked(self):
+		nb_steps = int(self.__step_spinbox.get())
+		for func in self.on_step_clicked:
+			func(nb_steps)
+
+	def __on_size_changed(self):
+		# old_size == new_size -> don't send event
+		for widget in [self.__x_spinbox, self.__y_spinbox]:
+			if self.__last_values[widget] == widget.get():
+				return
+		# new_size != old_size -> send event
+		new_size = Vector2i(int(self.__x_spinbox.get()), int(self.__y_spinbox.get()))
+		for func in self.on_size_changed:
+			func(new_size)
+
+	def __on_path_toggled(self):
+		is_toggled = self.__path_button_variable.get()
+		for func in self.on_path_toggled:
+			func(is_toggled)
+
+	def __spinbox_event_handler(self, current_text, event_type, widget_name):
 		widget = self.nametowidget(widget_name)
 		if event_type in ['focusin', 'forced']:
 			self.__last_values[widget] = current_text
 		elif event_type == 'focusout':
-			self.on_spinbox_leave(widget)
+			self.__on_spinbox_leave(widget)
 		return True
 
-	def on_spinbox_leave(self, widget):
+	def __on_spinbox_leave(self, widget):
 		text = widget.get()
 		if not (text and text.isdigit() and widget.cget('from') <= int(text) <= widget.cget('to')):
 			widget.delete(0, tk.END)
 			widget.insert(tk.END, self.__last_values[widget])
-		if widget in [self.__x_spinbox, self.__y_spinbox] and self.__last_values[widget] != widget.get():
-			x, y = int(self.__x_spinbox.get()), int(self.__y_spinbox.get())
-			self.master.on_controls_maze_size_changed(Vector2i(x, y))
 
 
 class Maze(tk.Canvas):
@@ -123,11 +150,11 @@ class Maze(tk.Canvas):
 		self.__graph: nx.DiGraph = nx.DiGraph()
 		self.__origins: set[Vector2i] = set()
 		self.__size: Vector2i = size
-		self.settings: MazeSettings = MazeSettings()
-		self.__start_end: tuple[Vector2i, Vector2i] = Vector2i(size.x - 1, 0), Vector2i(0, size.y - 1)
+		self.__solution_extremities: tuple[Vector2i, Vector2i] = Vector2i(size.x - 1, 0), Vector2i(0, size.y - 1)
 		self.__solution: tuple[list[Vector2i], int] | None = None
 		self.__last_created_arrows: list[int] = []
 		self.__is_solution_showned: bool = False
+		self.settings: MazeSettings = MazeSettings()
 		self.redraw()
 
 	def redraw(self) -> None:
@@ -140,9 +167,9 @@ class Maze(tk.Canvas):
 				position = Vector2i(row, col)
 				self.add_node(position)
 				if col > 0:
-					self.connect(position - Vector2i(0, 1), position)
+					self.add_edge(position - Vector2i(0, 1), position)
 					if col == last_col and row > 0:
-						self.connect(position - Vector2i(1, 0), position)
+						self.add_edge(position - Vector2i(1, 0), position)
 		self.add_origin(Vector2i(self.__size.x - 1, self.__size.y - 1))
 
 	def __get_solution_arrows(self) -> list[int]:
@@ -153,7 +180,7 @@ class Maze(tk.Canvas):
 			if i >= sep:
 				node1, node2 = node2, node1
 			if self.__graph.has_edge(node1, node2):
-				arrows.append(self.__graph.edges[(node1, node2)]['arrow'])
+				arrows.append(self.__get_graphical_arrow(node1, node2))
 		return arrows
 
 	def show_solution(self):
@@ -170,10 +197,7 @@ class Maze(tk.Canvas):
 			self.__recolor_arrow(arrow, color)
 
 	def recalculate_solution(self) -> list[Vector2i]:
-		"""
-		:return: a tuple containing the the list of the travarsed nodes in order
-		"""
-		start, end = self.__start_end
+		start, end = self.__solution_extremities
 		path1: list[Vector2i] = [start]
 		path2: list[Vector2i] = [end]
 		# calc path from start to origin
@@ -193,16 +217,25 @@ class Maze(tk.Canvas):
 		self.__solution = path1 + path2[::-1], len(path1)
 		return self.__solution[0]
 
-	def add_origin(self, o: Vector2i) -> None:
-		self.__origins.add(o)
-		self.itemconfigure(self.__graph.nodes[o]['point'], fill=self.settings.origin_color)
-		for connexion in list(self.__graph.neighbors(o)):
-			self.disconnect(o, connexion)
+	def add_origin(self, position: Vector2i) -> None:
+		self.__origins.add(position)
+		self.itemconfigure(self.__get_graphical_node(position), fill=self.settings.origin_color)
+		for connexion in list(self.__graph.neighbors(position)):
+			self.remove_edge(position, connexion)
 
-	def remove_origin(self, o: Vector2i) -> None:
-		color = self.settings.path_nodes_color if o in self.__start_end else self.settings.node_color
-		self.itemconfigure(self.__graph.nodes[o]['point'], fill=color)
-		self.__origins.discard(o)
+	def remove_origin(self, position: Vector2i) -> None:
+		if position not in self.__origins:
+			return
+		color = self.settings.path_nodes_color if position in self.__solution_extremities else self.settings.node_color
+		self.__recolor_node(self.__get_graphical_node(position), color)
+		self.__origins.discard(position)
+
+	def change_solution_node(self, position: Vector2i) -> None:
+		# recolor old start
+		self.__recolor_node(self.__get_graphical_node(self.__solution_extremities[0]), self.settings.node_color)
+		# recolor new end
+		self.__recolor_node(self.__get_graphical_node(position), self.settings.path_nodes_color)
+		self.__solution_extremities = self.__solution_extremities[1], position
 
 	def toggle_origin(self, o: Vector2i) -> None:
 		if o in self.__origins:
@@ -210,7 +243,7 @@ class Maze(tk.Canvas):
 		else:
 			self.add_origin(o)
 
-	def connect(self, p1: Vector2i, p2: Vector2i) -> None:
+	def add_edge(self, p1: Vector2i, p2: Vector2i) -> None:
 		start: Vector2 = self.settings.start_point + p1.swap() * self.settings.node_spacing
 		end: Vector2 = self.settings.start_point + p2.swap() * self.settings.node_spacing
 		direction: Vector2 = (end - start).normalized
@@ -219,13 +252,13 @@ class Maze(tk.Canvas):
 		end -= offset
 
 		arrow = self.create_line(*start, *end, arrow=tk.LAST, fill=self.settings.arrow_just_created_color)
-		self.__graph.add_edge(p1, p2, arrow=arrow)
+		self.__graph.add_edge(p1, p2, gfarrow=arrow)
 		self.__last_created_arrows.append(arrow)
 
-	def disconnect(self, p1: Vector2i, p2: Vector2i) -> None:
+	def remove_edge(self, p1: Vector2i, p2: Vector2i) -> None:
 		if not self.__graph.has_edge(p1, p2):
 			return
-		self.delete(self.__graph.edges[p1, p2]["arrow"])
+		self.delete(self.__get_graphical_arrow(p1, p2))
 		self.__graph.remove_edge(p1, p2)
 
 	def add_node(self, position: Vector2i) -> None:
@@ -233,20 +266,21 @@ class Maze(tk.Canvas):
 		radius_vector = self.settings.node_radius * Vector2(1, 1)
 		start = middle - radius_vector
 		end = middle + radius_vector
-		color = self.settings.path_nodes_color if position in self.__start_end else self.settings.node_color
+		color = self.settings.path_nodes_color if position in self.__solution_extremities else self.settings.node_color
 
 		node = self.create_oval(*start, *end, fill=color, outline='')
-		self.tag_bind(node, '<Button-1>', lambda e, p=position: self.toggle_origin(p))
-		self.__graph.add_node(position, point=node)
+		self.tag_bind(node, '<Button-3>', lambda e, p=position: self.toggle_origin(p))
+		self.tag_bind(node, '<Button-1>', lambda e, p=position: self.change_solution_node(p))
+		self.__graph.add_node(position, gfnode=node)
 
-	def delete_node(self, position: Vector2i) -> None:
+	def remove_node(self, position: Vector2i) -> None:
 		if not self.__graph.has_node(position):
 			return
 		for connexion in self.__graph.neighbors(position):
-			self.disconnect(position, connexion)
+			self.remove_edge(position, connexion)
 		for connexion in self.__graph.predecessors(position):
-			self.disconnect(connexion, position)
-		self.delete(self.__graph.nodes[position]['point'])
+			self.remove_edge(connexion, position)
+		self.delete(self.__get_graphical_node(position))
 		self.__graph.remove_node(position)
 		self.__origins.discard(position)
 
@@ -257,22 +291,22 @@ class Maze(tk.Canvas):
 				for col in range(self.__size.y):
 					position = Vector2i(row, col)
 					self.add_node(position)
-					self.connect(position, position + down)
+					self.add_edge(position, position + down)
 		elif size.x < self.__size.x:
 			for row in range(size.x, self.__size.x):
 				for col in range(self.__size.y):
-					self.delete_node(Vector2i(row, col))
+					self.remove_node(Vector2i(row, col))
 		if size.y > self.__size.y:
 			left = Vector2i(0, -1)
 			for col in range(self.__size.y, size.y):
 				for row in range(self.__size.x):
 					position = Vector2i(row, col)
 					self.add_node(position)
-					self.connect(position, position + left)
+					self.add_edge(position, position + left)
 		elif size.y < self.__size.y:
 			for col in range(size.y, self.__size.y):
 				for row in range(self.__size.x):
-					self.delete_node(Vector2i(row, col))
+					self.remove_node(Vector2i(row, col))
 		self.__size = size
 
 	def step(self) -> None:
@@ -283,7 +317,7 @@ class Maze(tk.Canvas):
 		while self.__origins:
 			origin = self.__origins.pop()
 			new_origin = rd.choice(self.adjacent_nodes(origin))
-			self.connect(origin, new_origin)
+			self.add_edge(origin, new_origin)
 			self.remove_origin(origin)
 			new_origins.add(new_origin)
 		for new_origin in new_origins:
@@ -304,8 +338,17 @@ class Maze(tk.Canvas):
 			res.append(Vector2i(node.x, node.y + 1))
 		return res
 
-	def __recolor_arrow(self, arrow, color) -> None:
+	def __get_graphical_node(self, position: Vector2i) -> int:
+		return self.__graph.nodes[position]['gfnode']
+
+	def __get_graphical_arrow(self, p1: Vector2i, p2: Vector2i) -> int:
+		return self.__graph.edges[p1, p2]['gfarrow']
+
+	def __recolor_arrow(self, arrow: int, color: str) -> None:
 		self.itemconfigure(arrow, fill=color)
+
+	def __recolor_node(self, node: int, color: str) -> None:
+		self.itemconfigure(node, fill=color)
 
 
 class MazeSettings:
