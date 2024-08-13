@@ -18,14 +18,14 @@ class App(tk.Tk):
 
 		self.config(width=512, height=512)
 
-		self.bind("<Button-1>", self.click_event)
+		self.bind("<Button-1>", lambda e: self.focus_fix)
 		self.last_focused = self
 
 		self.control_pannel.on_path_toggled.add(self.on_solution_button_clicked)
 		self.control_pannel.on_step_clicked.add(self.on_step_button_clicked)
 		self.control_pannel.on_size_changed.add(self.on_size_changed)
 
-	def click_event(self, event) -> None:
+	def focus_fix(self) -> None:
 		x, y = self.winfo_pointerxy()
 		widget = self.winfo_containing(x, y)
 		if widget != self.last_focused:
