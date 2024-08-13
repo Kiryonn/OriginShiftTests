@@ -54,7 +54,6 @@ class App(tk.Tk):
 class ControlPanel(tk.Frame):
 	def __init__(self, master: App):
 		super(ControlPanel, self).__init__(master)
-		self.master: App = master
 		self.__last_values = {}
 		# %d = Type of action (1=insert, 0=delete, -1 for others)
 		# %i = index of char string to be inserted/deleted, or -1
