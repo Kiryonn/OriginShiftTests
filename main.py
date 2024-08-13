@@ -219,7 +219,7 @@ class Maze(tk.Canvas):
 
 	def add_origin(self, position: Vector2i) -> None:
 		self.__origins.add(position)
-		self.itemconfigure(self.__get_graphical_node(position), fill=self.settings.origin_color)
+		self.__recolor_node(self.__get_graphical_node(position), self.settings.origin_color)
 		for connexion in list(self.__graph.neighbors(position)):
 			self.remove_edge(position, connexion)
 
