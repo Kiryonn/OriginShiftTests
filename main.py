@@ -229,18 +229,19 @@ class Maze(tk.Canvas):
 		self.__recolor_node(self.__get_graphical_node(position), color)
 		self.__origins.discard(position)
 
-	def change_solution_node(self, position: Vector2i) -> None:
-		# recolor old start
-		self.__recolor_node(self.__get_graphical_node(self.__solution_extremities[0]), self.settings.node_color)
-		# recolor new end
-		self.__recolor_node(self.__get_graphical_node(position), self.settings.path_nodes_color)
-		self.__solution_extremities = self.__solution_extremities[1], position
-
 	def toggle_origin(self, o: Vector2i) -> None:
 		if o in self.__origins:
 			self.remove_origin(o)
 		else:
 			self.add_origin(o)
+
+	def change_solution_node(self, position: Vector2i) -> None:
+		# recolor old start
+		self.__recolor_node(self.__get_graphical_node(self.__solution_extremities[0]), self.settings.node_color)
+		# recolor new end
+		self.__recolor_node(self.__get_graphical_node(position), self.settings.path_nodes_color)
+		# update solution start/end
+		self.__solution_extremities = self.__solution_extremities[1], position
 
 	def add_edge(self, p1: Vector2i, p2: Vector2i) -> None:
 		start: Vector2 = self.settings.start_point + p1.swap() * self.settings.node_spacing
