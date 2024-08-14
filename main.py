@@ -8,9 +8,7 @@ BASE_MAZE_SIZE = Vector2i(7, 7)
 
 
 def spinbox_vcmd(text: str) -> bool:
-	if text.isdigit() or text == '':
-		return True
-	return False
+	return text.isdigit() or text == ''
 
 
 class App(tk.Tk):
@@ -305,8 +303,8 @@ class Maze(tk.Canvas):
 		successors = list(self.__graph.neighbors(position))
 		for connexion in successors:
 			self.remove_edge(position, connexion)
-		successors = list(self.__graph.predecessors(position))
-		for connexion in successors:
+		predecessors = list(self.__graph.predecessors(position))
+		for connexion in predecessors:
 			self.remove_edge(connexion, position)
 		self.delete(self.__get_graphical_node(position))
 		self.__graph.remove_node(position)
