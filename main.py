@@ -7,6 +7,12 @@ from Vectors import *
 BASE_MAZE_SIZE = Vector2i(7, 7)
 
 
+def spinbox_vcmd(text: str) -> bool:
+	if text.isdigit() or text == '':
+		return True
+	return False
+
+
 class App(tk.Tk):
 	def __init__(self):
 		super(App, self).__init__()
@@ -58,7 +64,6 @@ class App(tk.Tk):
 class ControlPanel(tk.Frame):
 	def __init__(self, master: App):
 		super(ControlPanel, self).__init__(master)
-		self.spinbox_vcmd = master.register(self.__spinbox_vcmd)
 		spinbox_cnf = {
 			"width": 3
 		}
@@ -107,7 +112,8 @@ class ControlPanel(tk.Frame):
 		%V = the type of validation that triggered the callback (key, focusin, focusout, forced)
 		%W = the tk name of the widget
 		"""
-		vcmd = self.spinbox_vcmd, '%P', '%V'
+		self.spinbox_vcmd = self.register(spinbox_vcmd)
+		vcmd = self.spinbox_vcmd, '%P'
 		self.__step_spinbox['validatecommand'] = vcmd
 		self.__x_spinbox['validatecommand'] = vcmd
 		self.__y_spinbox['validatecommand'] = vcmd
@@ -116,6 +122,9 @@ class ControlPanel(tk.Frame):
 		self.__y_spinbox["command"] = self.__on_maze_size_changed
 		self.__path_button["command"] = self.__on_path_toggled
 		self.__step_button["command"] = self.__on_step_clicked
+
+		self.__x_spinbox.bind("<FocusOut>", lambda e: self.__on_maze_size_changed())
+		self.__y_spinbox.bind("<FocusOut>", lambda e: self.__on_maze_size_changed())
 
 		self.on_maze_size_changed = set()
 		self.on_step_clicked = set()
@@ -150,13 +159,6 @@ class ControlPanel(tk.Frame):
 		is_toggled = self.__path_button_variable.get()
 		for func in self.on_path_toggled:
 			func(is_toggled)
-
-	def __spinbox_vcmd(self, text: str, event_type: str) -> bool:
-		if event_type == 'focusout':
-			self.__on_maze_size_changed()
-		elif text.isdigit() or text == '':
-			return True
-		return False
 
 
 class Maze(tk.Canvas):
@@ -359,7 +361,7 @@ class MazeSettings:
 		self.node_color = "black"
 		self.arrow_color = "gray"
 		self.arrow_just_created_color = "orange"
-		self.path_arrow_color = "yellow"
+		self.path_arrow_color = "cadetblue3"
 		self.path_nodes_color = "blue"
 		self.node_spacing = 50
 		self.node_radius = 5
