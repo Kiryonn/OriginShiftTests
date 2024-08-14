@@ -1,6 +1,7 @@
 import tkinter as tk
 import networkx as nx
 import random as rd
+
 from Vectors import *
 
 BASE_MAZE_SIZE = Vector2i(7, 7)
@@ -18,14 +19,14 @@ class App(tk.Tk):
 
 		self.config(width=512, height=512)
 
-		self.bind("<Button-1>", lambda e: self.focus_fix)
+		self.bind("<Button-1>", self.focus_fix)
 		self.last_focused = self
 
 		self.control_pannel.on_path_toggled.add(self.on_solution_button_clicked)
 		self.control_pannel.on_step_clicked.add(self.on_step_button_clicked)
 		self.control_pannel.on_maze_size_changed.add(self.on_maze_size_changed)
 
-	def focus_fix(self) -> None:
+	def focus_fix(self, _event) -> None:
 		x, y = self.winfo_pointerxy()
 		widget = self.winfo_containing(x, y)
 		if widget != self.last_focused:
@@ -46,6 +47,9 @@ class App(tk.Tk):
 	def on_step_button_clicked(self, nb_steps: int) -> None:
 		for _ in range(nb_steps):
 			self.maze.step()
+		if self.maze.is_solution_showned:
+			self.maze.hide_solution()
+			self.maze.show_solution()
 
 	def on_maze_size_changed(self, size: Vector2i) -> None:
 		self.maze.resize(size)
@@ -54,24 +58,16 @@ class App(tk.Tk):
 class ControlPanel(tk.Frame):
 	def __init__(self, master: App):
 		super(ControlPanel, self).__init__(master)
-		self.__last_spinbox_values = {}
-		# %d = Type of action (1=insert, 0=delete, -1 for others)
-		# %i = index of char string to be inserted/deleted, or -1
-		# %P = value of the entry if the edit is allowed
-		# %s = value of entry prior to editing
-		# %S = the text string being inserted or deleted, if any
-		# %v = the type of validation that is currently set
-		# %V = the type of validation that triggered the callback (key, focusin, focusout, forced)
-		# %W = the tk name of the widget
-		self.__spinbox_checker = (self.register(self.__spinbox_event_handler), '%s', '%V', '%W')
+		self.spinbox_vcmd = master.register(self.__spinbox_vcmd)
 		spinbox_cnf = {
-			"width": 3,
-			"validate": 'all',
-			"validatecommand": self.__spinbox_checker
+			"width": 3
 		}
 
 		self.__step_label = tk.Label(self, text='Steps')
-		self.__step_spinbox = tk.Spinbox(self, spinbox_cnf, from_=1, to=1000, width=4)
+		self.__step_spinbox = tk.Spinbox(
+			self, spinbox_cnf,
+			from_=1, to=1000, width=4
+		)
 		self.__step_button = tk.Button(self, text='➤')
 		self.__size_label = tk.Label(self, text='Size')
 		self.__x_spinbox = tk.Spinbox(
@@ -86,7 +82,7 @@ class ControlPanel(tk.Frame):
 		)
 		self.__path_button_variable = tk.BooleanVar()
 		self.__path_button = tk.Checkbutton(
-			self, text='🧭', justify='center', anchor='center', variable=self.__path_button_variable
+			self, text='Show Solution', justify='center', anchor='center', variable=self.__path_button_variable
 		)
 
 		self.__step_label.pack(side='left', padx=(5, 0))
@@ -97,9 +93,27 @@ class ControlPanel(tk.Frame):
 		self.__y_spinbox.pack(side='left', padx=(5, 0))
 		self.__path_button.pack(side='left', padx=(20, 0))
 
-		self.__step_spinbox["command"] = lambda: self.__on_spinbox_leave(self.__step_spinbox)
-		self.__x_spinbox["command"] = lambda: [self.__on_spinbox_leave(self.__x_spinbox), self.__on_maze_size_changed()]
-		self.__y_spinbox["command"] = lambda: [self.__on_spinbox_leave(self.__y_spinbox), self.__on_maze_size_changed()]
+		self.__step_spinbox['validate'] = "all"
+		self.__x_spinbox['validate'] = "all"
+		self.__y_spinbox['validate'] = "all"
+
+		"""
+		%d = Type of action (1=insert, 0=delete, -1 for others)
+		%i = index of char string to be inserted/deleted, or -1
+		%P = value of the entry if the edit is allowed
+		%s = value of entry prior to editing
+		%S = the text string being inserted or deleted, if any
+		%v = the type of validation that is currently set
+		%V = the type of validation that triggered the callback (key, focusin, focusout, forced)
+		%W = the tk name of the widget
+		"""
+		vcmd = self.spinbox_vcmd, '%P', '%V'
+		self.__step_spinbox['validatecommand'] = vcmd
+		self.__x_spinbox['validatecommand'] = vcmd
+		self.__y_spinbox['validatecommand'] = vcmd
+
+		self.__x_spinbox["command"] = self.__on_maze_size_changed
+		self.__y_spinbox["command"] = self.__on_maze_size_changed
 		self.__path_button["command"] = self.__on_path_toggled
 		self.__step_button["command"] = self.__on_step_clicked
 
@@ -107,39 +121,42 @@ class ControlPanel(tk.Frame):
 		self.on_step_clicked = set()
 		self.on_path_toggled = set()
 
-	def __on_step_clicked(self):
+		self.last_maze_size: Vector2i = BASE_MAZE_SIZE
+
+	def __on_step_clicked(self) -> None:
 		nb_steps = int(self.__step_spinbox.get())
 		for func in self.on_step_clicked:
 			func(nb_steps)
 
-	def __on_maze_size_changed(self):
-		# old_size == new_size -> don't send event
-		for widget in [self.__x_spinbox, self.__y_spinbox]:
-			if self.__last_spinbox_values[widget] == widget.get():
-				return
-		# new_size != old_size -> send event
-		new_size = Vector2i(int(self.__x_spinbox.get()), int(self.__y_spinbox.get()))
+	def __on_maze_size_changed(self) -> None:
+		x, y = self.last_maze_size
+		new_x, new_y = self.__x_spinbox.get(), self.__y_spinbox.get()
+		if new_x:
+			inx = int(new_x)
+			if self.__x_spinbox.cget('from') <= inx <= self.__x_spinbox.cget('to'):
+				x = inx
+		if new_y:
+			iny = int(new_y)
+			if self.__y_spinbox.cget('from') <= iny <= self.__y_spinbox.cget('to'):
+				y = iny
+		new_size = Vector2i(x, y)
+		if new_size == self.last_maze_size:
+			return
+		self.last_maze_size = new_size
 		for func in self.on_maze_size_changed:
 			func(new_size)
 
-	def __on_path_toggled(self):
+	def __on_path_toggled(self) -> None:
 		is_toggled = self.__path_button_variable.get()
 		for func in self.on_path_toggled:
 			func(is_toggled)
 
-	def __spinbox_event_handler(self, current_text: str, event_type, widget_name) -> bool:
-		widget = self.nametowidget(widget_name)
-		if event_type in ['focusin', 'forced']:
-			self.__last_spinbox_values[widget] = current_text
-		elif event_type == 'focusout':
-			self.__on_spinbox_leave(widget)
-		return True
-
-	def __on_spinbox_leave(self, widget):
-		text = widget.get()
-		if not (text and text.isdigit() and widget.cget('from') <= int(text) <= widget.cget('to')):
-			widget.delete(0, tk.END)
-			widget.insert(tk.END, self.__last_spinbox_values[widget])
+	def __spinbox_vcmd(self, text: str, event_type: str) -> bool:
+		if event_type == 'focusout':
+			self.__on_maze_size_changed()
+		elif text.isdigit() or text == '':
+			return True
+		return False
 
 
 class Maze(tk.Canvas):
@@ -149,18 +166,22 @@ class Maze(tk.Canvas):
 		self.__graph: nx.DiGraph = nx.DiGraph()
 		self.__origins: set[Vector2i] = set()
 		self.__size: Vector2i = size
-		self.__solution_extremities: tuple[Vector2i, Vector2i] = Vector2i(size.x - 1, 0), Vector2i(0, size.y - 1)
-		self.__solution: tuple[list[Vector2i], int] | None = None
+		self.__solution_extremities: tuple[Vector2i, Vector2i] = Vector2i(0, 0), Vector2i(0, 0)
+		self.__solution: tuple[list[Vector2i], int] | None = [], 0
 		self.__last_created_arrows: list[int] = []
 		self.__is_solution_showned: bool = False
 		self.settings: MazeSettings = MazeSettings()
 		self.redraw()
 
+	@property
+	def is_solution_showned(self) -> bool:
+		return self.__is_solution_showned
+
 	def redraw(self) -> None:
 		self.delete('all')
 		self.__graph.clear()
 		self.__origins.clear()
-		last_col = self.__size.x - 1
+		last_col = self.__size.y - 1
 		for row in range(self.__size.x):
 			for col in range(self.__size.y):
 				position = Vector2i(row, col)
@@ -170,6 +191,8 @@ class Maze(tk.Canvas):
 					if col == last_col and row > 0:
 						self.add_edge(position - Vector2i(1, 0), position)
 		self.add_origin(Vector2i(self.__size.x - 1, self.__size.y - 1))
+		self.change_solution_node(Vector2i(self.__size.x - 1, 0))
+		self.change_solution_node(Vector2i(0, self.__size.y - 1))
 
 	def __get_solution_arrows(self) -> list[int]:
 		solution, sep = self.__solution
@@ -183,7 +206,7 @@ class Maze(tk.Canvas):
 		return arrows
 
 	def show_solution(self):
-		self.recalculate_solution()
+		self.__solution = self.recalculate_solution()
 		self.__is_solution_showned = True
 		color = self.settings.path_arrow_color
 		for arrow in self.__get_solution_arrows():
@@ -195,7 +218,7 @@ class Maze(tk.Canvas):
 		for arrow in self.__get_solution_arrows():
 			self.__recolor_arrow(arrow, color)
 
-	def recalculate_solution(self) -> list[Vector2i]:
+	def recalculate_solution(self) -> tuple[list[Vector2i], int]:
 		start, end = self.__solution_extremities
 		path1: list[Vector2i] = [start]
 		path2: list[Vector2i] = [end]
@@ -213,8 +236,7 @@ class Maze(tk.Canvas):
 		# remove duplicate intersection point
 		path2.pop()
 		# the solution is the (start -> intersection) + (end -> intersection) reversed
-		self.__solution = path1 + path2[::-1], len(path1)
-		return self.__solution[0]
+		return path1 + path2[::-1], len(path1)
 
 	def add_origin(self, position: Vector2i) -> None:
 		self.__origins.add(position)
@@ -230,14 +252,18 @@ class Maze(tk.Canvas):
 	def toggle_origin(self, o: Vector2i) -> None:
 		if o in self.__origins:
 			self.remove_origin(o)
+			self.add_edge(o, rd.choice(self.adjacent_nodes(o)))
 		else:
 			self.add_origin(o)
 
 	def change_solution_node(self, position: Vector2i) -> None:
 		# recolor old start
-		self.__recolor_node(self.__get_graphical_node(self.__solution_extremities[0]), self.settings.node_color)
+		old_start = self.__solution_extremities[0]
+		if self.__graph.has_node(old_start):
+			self.__recolor_node(self.__get_graphical_node(old_start), self.settings.node_color)
 		# recolor new end
-		self.__recolor_node(self.__get_graphical_node(position), self.settings.path_nodes_color)
+		if self.__graph.has_node(position):
+			self.__recolor_node(self.__get_graphical_node(position), self.settings.path_nodes_color)
 		# update solution start/end
 		self.__solution_extremities = self.__solution_extremities[1], position
 
@@ -274,38 +300,19 @@ class Maze(tk.Canvas):
 	def remove_node(self, position: Vector2i) -> None:
 		if not self.__graph.has_node(position):
 			return
-		for connexion in self.__graph.neighbors(position):
+		successors = list(self.__graph.neighbors(position))
+		for connexion in successors:
 			self.remove_edge(position, connexion)
-		for connexion in self.__graph.predecessors(position):
+		successors = list(self.__graph.predecessors(position))
+		for connexion in successors:
 			self.remove_edge(connexion, position)
 		self.delete(self.__get_graphical_node(position))
 		self.__graph.remove_node(position)
 		self.__origins.discard(position)
 
 	def resize(self, size: Vector2i) -> None:
-		if size.x > self.__size.x:
-			down = Vector2i(-1, 0)
-			for row in range(self.__size.x, size.x):
-				for col in range(self.__size.y):
-					position = Vector2i(row, col)
-					self.add_node(position)
-					self.add_edge(position, position + down)
-		elif size.x < self.__size.x:
-			for row in range(size.x, self.__size.x):
-				for col in range(self.__size.y):
-					self.remove_node(Vector2i(row, col))
-		if size.y > self.__size.y:
-			left = Vector2i(0, -1)
-			for col in range(self.__size.y, size.y):
-				for row in range(self.__size.x):
-					position = Vector2i(row, col)
-					self.add_node(position)
-					self.add_edge(position, position + left)
-		elif size.y < self.__size.y:
-			for col in range(size.y, self.__size.y):
-				for row in range(self.__size.x):
-					self.remove_node(Vector2i(row, col))
 		self.__size = size
+		self.redraw()
 
 	def step(self) -> None:
 		while self.__last_created_arrows:
@@ -320,9 +327,6 @@ class Maze(tk.Canvas):
 			new_origins.add(new_origin)
 		for new_origin in new_origins:
 			self.add_origin(new_origin)
-		if self.__is_solution_showned:
-			# todo recalculate solution
-			pass
 
 	def adjacent_nodes(self, node: Vector2i) -> list[Vector2i]:
 		res: list[Vector2i] = []
@@ -355,7 +359,7 @@ class MazeSettings:
 		self.node_color = "black"
 		self.arrow_color = "gray"
 		self.arrow_just_created_color = "orange"
-		self.path_arrow_color = "deeppink3"
+		self.path_arrow_color = "yellow"
 		self.path_nodes_color = "blue"
 		self.node_spacing = 50
 		self.node_radius = 5
