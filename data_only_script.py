@@ -58,13 +58,27 @@ def get_path_to_origin(maze: Maze, _from: Position) -> Path:
 def solve(maze: Maze, _from: Position, to: Position) -> Path:
 	path1: Path = get_path_to_origin(maze, _from)
 	path2: Path = get_path_to_origin(maze, to)
-
 	intersection: Position = path1[-1]
-	while path1[-1] == path2[-1]:
+	while path1 and path2 and path1[-1] == path2[-1]:
 		intersection = path1.pop()
 		path2.pop()
 	# the solution is path1 + intersection + reversed path2
 	return path1 + [intersection] + path2[::-1]
 
 
-pprint.pprint(generate_maze((3, 3)))
+def usage_example():
+	MAZE_SIZE: Size = 7, 7
+	START = MAZE_SIZE[0] - 1, 0
+	END = 0, MAZE_SIZE[1] - 1
+	maze: Maze = generate_maze(MAZE_SIZE)
+	origin: Position = MAZE_SIZE[0] - 1, MAZE_SIZE[1] - 1
+	for _ in range(MAZE_SIZE[0] * MAZE_SIZE[1] * 10):
+		origin = origin_shift(maze, origin, MAZE_SIZE)
+	print("           maze", maze)
+	print("start -> origin", get_path_to_origin(maze, START))
+	print("  end -> origin", get_path_to_origin(maze, END))
+	print("       solution", solve(maze, START, END))
+
+
+if __name__ == '__main__':
+	usage_example()
