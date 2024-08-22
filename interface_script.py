@@ -1,4 +1,10 @@
+import os
 import tkinter as tk
+from datetime import datetime
+from typing import Callable
+
+from PIL import Image
+
 import networkx as nx
 import random as rd
 
@@ -26,9 +32,10 @@ class App(tk.Tk):
 		self.bind("<Button-1>", self.focus_fix)
 		self.last_focused = self
 
-		self.control_pannel.on_path_toggled.add(self.on_solution_button_clicked)
-		self.control_pannel.on_step_clicked.add(self.on_step_button_clicked)
-		self.control_pannel.on_maze_size_changed.add(self.on_maze_size_changed)
+		self.control_pannel.on_path_toggled += self.on_solution_button_clicked
+		self.control_pannel.on_step_clicked += self.on_step_button_clicked
+		self.control_pannel.on_maze_size_changed += self.on_maze_size_changed
+		self.control_pannel.on_save_image_button_pressed += self.make_maze_screenshot
 
 	def focus_fix(self, _event) -> None:
 		x, y = self.winfo_pointerxy()
@@ -57,6 +64,30 @@ class App(tk.Tk):
 
 	def on_maze_size_changed(self, size: Vector2i) -> None:
 		self.maze.resize(size)
+
+	def make_maze_screenshot(self):
+		area = self.maze.get_area()
+		w, h = area[2], area[3]
+		im = Image.new("RGB", (w, h))
+		colors = {}
+
+		get_color = lambda clr: tuple(c // 256 for c in self.winfo_rgb(clr))
+
+		maze_bg_color = get_color(self.maze.cget("bg"))
+		for x in range(w):
+			for y in range(h):
+				obj = self.maze.find_overlapping(x, y, x, y)
+				color = maze_bg_color if len(obj) == 0 else get_color(self.maze.itemcget(obj[0], "fill"))
+				if color in colors:
+					colors[color] += 1
+				else:
+					colors[color] = 0
+				im.putpixel((x, y), color)
+		if not os.path.exists("screenshots/"):
+			os.makedirs("screenshots/")
+		filename = "screenshots/" + datetime.now().strftime("%Y_%m_%d-%H_%M_%S") + ".png"
+		im.save(filename, format="png")
+		print("image saved successfully at", os.path.abspath(filename))
 
 
 class ControlPanel(tk.Frame):
@@ -87,6 +118,7 @@ class ControlPanel(tk.Frame):
 		self.__path_button = tk.Checkbutton(
 			self, text='Show Solution', justify='center', anchor='center', variable=self.__path_button_variable
 		)
+		self.__save_image_button = tk.Button(self, text="Save Image")
 
 		self.__step_label.pack(side='left', padx=(5, 0))
 		self.__step_spinbox.pack(side='left', padx=(5, 0))
@@ -95,6 +127,7 @@ class ControlPanel(tk.Frame):
 		self.__x_spinbox.pack(side='left', padx=(5, 0))
 		self.__y_spinbox.pack(side='left', padx=(5, 0))
 		self.__path_button.pack(side='left', padx=(20, 0))
+		self.__save_image_button.pack(side='left', padx=(5, 0))
 
 		self.__step_spinbox['validate'] = "all"
 		self.__x_spinbox['validate'] = "all"
@@ -120,20 +153,21 @@ class ControlPanel(tk.Frame):
 		self.__y_spinbox["command"] = self.__on_maze_size_changed
 		self.__path_button["command"] = self.__on_path_toggled
 		self.__step_button["command"] = self.__on_step_clicked
+		self.__save_image_button['command'] = self.__on_save_image_button_pressed
 
 		self.__x_spinbox.bind("<FocusOut>", lambda e: self.__on_maze_size_changed())
 		self.__y_spinbox.bind("<FocusOut>", lambda e: self.__on_maze_size_changed())
 
-		self.on_maze_size_changed = set()
-		self.on_step_clicked = set()
-		self.on_path_toggled = set()
+		self.on_maze_size_changed = Signal()
+		self.on_step_clicked = Signal()
+		self.on_path_toggled = Signal()
+		self.on_save_image_button_pressed = Signal()
 
 		self.last_maze_size: Vector2i = BASE_MAZE_SIZE
 
 	def __on_step_clicked(self) -> None:
 		nb_steps = int(self.__step_spinbox.get())
-		for func in self.on_step_clicked:
-			func(nb_steps)
+		self.on_step_clicked.emit(nb_steps)
 
 	def __on_maze_size_changed(self) -> None:
 		x, y = self.last_maze_size
@@ -150,13 +184,14 @@ class ControlPanel(tk.Frame):
 		if new_size == self.last_maze_size:
 			return
 		self.last_maze_size = new_size
-		for func in self.on_maze_size_changed:
-			func(new_size)
+		self.on_maze_size_changed.emit(new_size)
 
 	def __on_path_toggled(self) -> None:
 		is_toggled = self.__path_button_variable.get()
-		for func in self.on_path_toggled:
-			func(is_toggled)
+		self.on_path_toggled.emit(is_toggled)
+
+	def __on_save_image_button_pressed(self):
+		self.on_save_image_button_pressed.emit()
 
 
 class Maze(tk.Canvas):
@@ -352,6 +387,13 @@ class Maze(tk.Canvas):
 	def __recolor_node(self, node: int, color: str) -> None:
 		self.itemconfigure(node, fill=color)
 
+	def get_area(self) -> tuple[int, int, int, int]:
+		"""
+		:return: [x, y, width, height]
+		"""
+		width, height = self.settings.node_spacing * (self.__size - Vector2i(1, 1)) + self.settings.start_point * 2
+		return 0, 0, math.ceil(width), math.ceil(height)
+
 
 class MazeSettings:
 	def __init__(self):
@@ -364,6 +406,29 @@ class MazeSettings:
 		self.node_spacing = 50
 		self.node_radius = 5
 		self.start_point = Vector2(20, 20)
+
+
+class Signal:
+	def __init__(self):
+		self.__funcs = set()
+
+	def add_listener(self, func: Callable):
+		self.__funcs.add(func)
+
+	def remove_listener(self, func: Callable):
+		self.__funcs.discard(func)
+
+	def emit(self, *args, **kws):
+		for func in self.__funcs:
+			func(*args, **kws)
+
+	def __iadd__(self, func: Callable):
+		self.add_listener(func)
+		return self
+
+	def __isub__(self, func: Callable):
+		self.remove_listener(func)
+		return self
 
 
 if __name__ == '__main__':
