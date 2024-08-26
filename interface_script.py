@@ -65,19 +65,20 @@ class App(tk.Tk):
 	def on_maze_size_changed(self, size: Vector2i) -> None:
 		self.maze.resize(size)
 
+	def get_color(self, color) -> tuple[int, ...]:
+		return tuple(c // 256 for c in self.winfo_rgb(color))
+
 	def make_maze_screenshot(self):
 		area = self.maze.get_area()
 		w, h = area[2], area[3]
 		im = Image.new("RGB", (w, h))
 		colors = {}
 
-		get_color = lambda clr: tuple(c // 256 for c in self.winfo_rgb(clr))
-
-		maze_bg_color = get_color(self.maze.cget("bg"))
+		maze_bg_color = self.get_color(self.maze.cget("bg"))
 		for x in range(w):
 			for y in range(h):
 				obj = self.maze.find_overlapping(x, y, x, y)
-				color = maze_bg_color if len(obj) == 0 else get_color(self.maze.itemcget(obj[0], "fill"))
+				color = maze_bg_color if len(obj) == 0 else self.get_color(self.maze.itemcget(obj[0], "fill"))
 				if color in colors:
 					colors[color] += 1
 				else:
