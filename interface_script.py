@@ -207,26 +207,36 @@ class Maze(tk.Canvas):
 		self.__last_created_arrows: list[int] = []
 		self.__is_solution_showned: bool = False
 		self.settings: MazeSettings = MazeSettings()
+		self.unvisited_nodes: set[Vector2i] = set()
+		self.visit_count: dict[Vector2i, int] = {}
 		self.redraw()
 
-	@property
-	def is_solution_showned(self) -> bool:
+	def __is_solution_showned_getter(self) -> bool:
 		return self.__is_solution_showned
+
+	# noinspection PyTypeChecker
+	is_solution_showned = property(__is_solution_showned_getter)
 
 	def redraw(self) -> None:
 		self.delete('all')
 		self.__graph.clear()
 		self.__origins.clear()
+		self.unvisited_nodes.clear()
 		last_col = self.__size.y - 1
 		for row in range(self.__size.x):
 			for col in range(self.__size.y):
 				position = Vector2i(row, col)
+				self.unvisited_nodes.add(position)
 				self.add_node(position)
 				if col > 0:
 					self.add_edge(position - Vector2i(0, 1), position)
 					if col == last_col and row > 0:
 						self.add_edge(position - Vector2i(1, 0), position)
-		self.add_origin(Vector2i(self.__size.x - 1, self.__size.y - 1))
+		origin = Vector2i(self.__size.x - 1, self.__size.y - 1)
+		self.add_origin(origin)
+		self.visit_count = {n: 0 for n in self.unvisited_nodes}
+		self.visit_count[origin] += 1
+		self.unvisited_nodes.discard(origin)
 		self.change_solution_node(Vector2i(self.__size.x - 1, 0))
 		self.change_solution_node(Vector2i(0, self.__size.y - 1))
 
@@ -351,18 +361,32 @@ class Maze(tk.Canvas):
 		self.redraw()
 
 	def step(self) -> None:
+		# self.unvisited_nodes = set(self.__graph.nodes)
+		# self.visit_count = {node: 0 for node in self.__graph.nodes}
+		# for origin in self.__origins:
+		# 	self.unvisited_nodes.discard(origin)
+		# 	self.visit_count[origin] += 1
+		# while self.unvisited_nodes:
 		while self.__last_created_arrows:
 			arrow = self.__last_created_arrows.pop()
 			self.__recolor_arrow(arrow, self.settings.arrow_color)
 		new_origins: set[Vector2i] = set()
 		while self.__origins:
 			origin = self.__origins.pop()
-			new_origin = rd.choice(self.adjacent_nodes(origin))
+			directions, weigths = self.get_weigthed_directions(origin)
+			new_origin = rd.choices(directions, weights=weigths, k=1)[0]
+			# self.visit_count[new_origin] += 1
+			# self.unvisited_nodes.discard(new_origin)
 			self.add_edge(origin, new_origin)
 			self.remove_origin(origin)
 			new_origins.add(new_origin)
 		for new_origin in new_origins:
 			self.add_origin(new_origin)
+
+	def get_weigthed_directions(self, position: Vector2i):
+		directions: list[Vector2i] = self.adjacent_nodes(position)
+		weigths = [1 / (self.visit_count[n] + 1) for n in directions]
+		return directions, weigths
 
 	def adjacent_nodes(self, node: Vector2i) -> list[Vector2i]:
 		res: list[Vector2i] = []

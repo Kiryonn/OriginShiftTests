@@ -1,84 +1,117 @@
 import random
+import time
 
-# We define needed types
 Position = tuple[int, int]
-Size = Position
+Size = tuple[int, int]
 Maze = dict[Position, Position | None]
-Path = list[Position]
 
 
-def generate_maze(size: Size) -> Maze:
+def generate_default_maze(size: Size) -> Maze:
 	rows, cols = size
 	maxrow, maxcol = rows - 1, cols - 1
-	maze: Maze = {
-		(row, col): (
-			(row, col + 1) if col != maxcol  # Every other node
-			else (row + 1, col) if row != maxrow  # Right most ndoes
-			else None  # Origin node
-		) for col in range(size[1]) for row in range(size[0])}
+	maze: Maze = {}
+	for row in range(size[0]):
+		for col in range(size[1]):
+			# right most nodes points downwards
+			if col == maxcol:
+				maze[row, col] = row + 1, col
+			# other nodes points right
+			else:
+				maze[row, col] = row, col + 1
+	#  origin node points nowhere
+	maze[maxrow, maxcol] = None
 	return maze
 
 
-def origin_shift(maze: Maze, origin: Position, maze_size: Size) -> Position:
-	new_origin = random.choice(neighbours(origin, maze_size))
+def origin_shift(maze: Maze, origin: Position) -> Position:
+	nodes = neighbours(maze, origin)
+	new_origin = random.choice(nodes)
 	maze[origin] = new_origin
 	maze[new_origin] = None
 	return new_origin
 
 
-def neighbours(node: Position, maze_size: Size) -> list[Position]:
-	res: list[Position] = []
-	xm1 = node[0] - 1
-	xp1 = node[0] + 1
-	ym1 = node[1] - 1
-	yp1 = node[1] + 1
-	if 0 <= xm1 < maze_size[0]:  # left
-		res.append((xm1, node[1]))
-	if 0 <= xp1 < maze_size[0]:  # right
-		res.append((xp1, node[1]))
-	if 0 <= ym1 < maze_size[1]:  # up
-		res.append((node[0], ym1))
-	if 0 <= yp1 < maze_size[1]:  # down
-		res.append((node[0], yp1))
-	return res
+def weighted_origin_shift(maze: Maze, origin: Position, visit_count: dict[Position, int]) -> Position:
+	nodes = neighbours(maze, origin)
+	weights = [1 / (visit_count[n] + 1) for n in nodes]
+	new_origin = random.choices(nodes, weights=weights, k=1)[0]
+	maze[origin] = new_origin
+	maze[new_origin] = None
+	return new_origin
 
 
-def get_path_to_origin(maze: Maze, _from: Position) -> Path:
-	path: Path = []
-	current_position: Position = _from
-	# stop when the origin is found
-	while maze[current_position] is not None:
-		path.append(current_position)
-		current_position = maze[current_position]
-	# we append the origin node
-	path.append(current_position)
-	return path
+def test_weighted_origin_shift(maze_size: Size, nb_tests: int):
+	maze = generate_default_maze(maze_size)
+	origin = maze_size[0] - 1, maze_size[1] - 1
+	iterations = []
+	durations = []
+	for _ in range(nb_tests):
+		start_time = time.time()
+
+		# setup
+		visit_count: dict[Position, int] = {k: 0 for k in maze.keys()}
+		unvisited_nodes: set[Position] = set(maze.keys())
+		unvisited_nodes.discard(origin)
+		visit_count[origin] += 1
+		nb_loop = 0
+
+		# loop
+		while unvisited_nodes:
+			origin = weighted_origin_shift(maze, origin, visit_count)
+			visit_count[origin] += 1
+			unvisited_nodes.discard(origin)
+			nb_loop += 1
+
+		end_time = time.time()
+		iterations.append(nb_loop)
+		durations.append((end_time - start_time) * 1000)
+	print("Maze of size", maze_size[0], "by", maze_size[1], "over", nb_tests, "tests")
+	print("Itérations")
+	print_stats(iterations, indents=1)
+	print()
+	print("Time (in ms)")
+	print_stats(durations, indents=1)
 
 
-def solve(maze: Maze, _from: Position, to: Position) -> Path:
-	path1: Path = get_path_to_origin(maze, _from)
-	path2: Path = get_path_to_origin(maze, to)
-	intersection: Position = path1[-1]
-	while path1 and path2 and path1[-1] == path2[-1]:
-		intersection = path1.pop()
-		path2.pop()
-	# the solution is path1 + intersection + reversed path2
-	return path1 + [intersection] + path2[::-1]
+def neighbours(maze: Maze, node: Position) -> list[Position]:
+	row, col = node
+	adjacent_nodes = (row - 1, col), (row + 1, col), (row, col - 1), (row, col + 1)
+	return [node for node in adjacent_nodes if node in maze]
 
 
-def usage_example():
-	MAZE_SIZE: Size = 7, 7
-	START = MAZE_SIZE[0] - 1, 0
-	END = 0, MAZE_SIZE[1] - 1
-	maze: Maze = generate_maze(MAZE_SIZE)
-	origin: Position = MAZE_SIZE[0] - 1, MAZE_SIZE[1] - 1
-	for _ in range(MAZE_SIZE[0] * MAZE_SIZE[1] * 10):
-		origin = origin_shift(maze, origin, MAZE_SIZE)
-	print("           maze", maze)
-	print("start -> origin", get_path_to_origin(maze, START))
-	print("  end -> origin", get_path_to_origin(maze, END))
-	print("       solution", solve(maze, START, END))
+def multi_origins_shift(maze: Maze, origins: set[Position]) -> set[Position]:
+	new_origins = set()
+	for origin in origins:
+		new_origin = random.choice(neighbours(maze, origin))
+		new_origins.add(new_origin)
+		maze[origin] = new_origin
+	# separated to avoid bugs
+	for origin in new_origins:
+		maze[origin] = None
+	return new_origins
+
+
+def test_multi_origins(maze_size: Size, origins: set[Position], nb_iter: int):
+	maze = generate_default_maze(maze_size)
+	origins_translations: list[set[Position]] = [origins]
+	for _ in range(nb_iter):
+		origins = multi_origins_shift(maze, origins)
+		origins_translations.append(origins)
+	print(origins_translations)
+
+
+def print_stats(number_list, indents=0):
+	if not number_list:
+		return
+	sorted_list = sorted(number_list)
+	cumulated_sum = sum(sorted_list)
+	indentation = '\t' * indents
+	print(indentation + 'min    :', sorted_list[0])
+	print(indentation + 'max    :', sorted_list[-1])
+	print(indentation + 'average:', cumulated_sum / len(sorted_list))
+	print(indentation + 'Q1     :', sorted_list[len(sorted_list) // 4])
+	print(indentation + 'Q3     :', sorted_list[len(sorted_list) * 3 // 4])
 
 
 if __name__ == '__main__':
-	usage_example()
+	test_weighted_origin_shift((16, 16), 5000)
