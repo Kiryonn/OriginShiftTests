@@ -10,20 +10,6 @@ class Vector2:
 
 	# region properties
 	@property
-	def magnitude(self) -> float:
-		return math.sqrt(self.x * self.x + self.y * self.y)
-
-	@property
-	def normalized(self) -> Self:
-		if self == Vector2(0, 0):
-			return self
-		return self / self.magnitude
-
-	@property
-	def sqr_magnitude(self) -> float:
-		return self.x * self.x + self.y * self.y
-
-	@property
 	def x(self) -> float:
 		return self._x
 
@@ -42,57 +28,61 @@ class Vector2:
 		if not isinstance(value, float | int):
 			raise TypeError("Cannot assign " + value.__class__.__name__ + "to Vector2.y")
 		self._y = float(value)
-
 	# endregion properties
 
-	# region public_methods
+	# region methods
+	def angle(self, v2: Self, use_radian: bool = False) -> float:
+		if not isinstance(v2, Vector2):
+			raise TypeError(f"Cannot calculate angle between Vector2 and {v2.__class__.__name__}")
+		if self.x == self.y == 0 or v2.x == v2.y == 0:
+			return 0.0
+		if self == -v2:
+			return math.radians(180.0) if use_radian else 180.0
+		dot: float = self.dot(v2)
+		angle: float = math.acos(dot * dot / (self.sqr_magnitude() * v2.sqr_magnitude()))
+		return angle if use_radian else math.degrees(angle)
+
+	def dot(self, v2: Self) -> float:
+		if not isinstance(v2, Vector2):
+			raise TypeError(f"Can't use dot product between Vector2 and {v2.__class__.__name__}")
+		return self.x * v2.x + self.y * v2.y
+
+	def magnitude(self) -> float:
+		return math.sqrt(self.x * self.x + self.y * self.y)
+
 	def normalize(self) -> None:
 		if self != Vector2(0, 0):
-			self.set(*(self / self.magnitude))
+			self.set(*(self / self.magnitude()))
+
+	def normalized(self) -> Self:
+		if self == Vector2(0, 0):
+			return self
+		return self / self.magnitude()
 
 	def set(self, x: float | int, y: float | int) -> None:
 		self.x = x
 		self.y = y
 
+	def sqr_magnitude(self) -> float:
+		return self.x * self.x + self.y * self.y
+
 	def swap(self) -> Self:
 		return Vector2(self.y, self.x)
-	# endregion public_methods
+
+	# endregion methods
 
 	# region static_methods
 	@staticmethod
-	def angle(v1: 'Self', v2: 'Self', use_radian: bool = False) -> float:
-		if not (isinstance(v1, Vector2) and isinstance(v2, Vector2)):
-			raise TypeError(f"Cannot calculate angle between {v1.__class__.__name__} and {v2.__class__.__name__}")
-		if v1.x == v1.y == 0 or v2.x == v2.y == 0:
-			return 0.0
-		if v1 == -v2:
-			return math.radians(180.0) if use_radian else 180.0
-		dot: float = Vector2.dot(v1, v2)
-		angle: float = math.acos(dot * dot / (v1.sqr_magnitude * v2.sqr_magnitude))
-		return angle if use_radian else math.degrees(angle)
-
-	@staticmethod
-	def dot(v1: 'Self', v2: 'Self') -> float:
-		if not (isinstance(v1, Vector2) and isinstance(v2, Vector2)):
-			raise TypeError(f"Can't use dot product between {v1.__class__.__name__} and {v2.__class__.__name__}")
-		return v1.x * v2.x + v1.y * v2.y
-
-	@staticmethod
-	def max(v1: 'Self', v2: 'Self') -> 'Self':
-		if not isinstance(v1, Vector2):
-			raise TypeError("Wrong argument for Vector2.max, got " + v1.__class__.__name__ + " instead of Vector2")
-		if not isinstance(v2, Vector2):
-			raise TypeError("Wrong argument for Vector2.max, got " + v2.__class__.__name__ + " instead of Vector2")
+	def max(v1: Self | 'Vector2i', v2: Self | 'Vector2i') -> Self:
+		if not (isinstance(v1, Vector2 | Vector2i) and isinstance(v2, Vector2 | Vector2i)):
+			raise TypeError
 		return Vector2(max(v1.x, v2.x), max(v1.y, v2.y))
 
 	@staticmethod
-	def min(v1: 'Self', v2: 'Self') -> 'Self':
-		if not isinstance(v1, Vector2):
-			raise TypeError("Wrong argument for Vector2.min, got " + v1.__class__.__name__ + " instead of Vector2")
-		if not isinstance(v2, Vector2):
-			raise TypeError("Wrong argument for Vector2.min, got " + v2.__class__.__name__ + " instead of Vector2")
+	def min(v1: Self | 'Vector2i', v2: Self | 'Vector2i') -> Self:
+		if not (isinstance(v1, Vector2 | Vector2i) and isinstance(v2, Vector2 | Vector2i)):
+			raise TypeError
 		return Vector2(min(v1.x, v2.x), min(v1.y, v2.y))
-
 	# endregion static_methods
 
 	# region magic_methods
@@ -204,7 +194,7 @@ class Vector2:
 		return f"Vector2({self.x:.5g}, {self.y:.5g})"
 
 	def __hash__(self):
-		return hash(self.__repr__())
+		return hash((self.x, self.y))
 	# endregion magic_methods
 	pass
 
@@ -216,20 +206,6 @@ class Vector2i:
 		self.set(x, y)
 
 	# region properties
-	@property
-	def magnitude(self) -> float:
-		return math.sqrt(self.x * self.x + self.y * self.y)
-
-	@property
-	def normalized(self) -> Self:
-		if self == Vector2i(0, 0):
-			return Vector2i(0, 0)
-		return self / self.magnitude
-
-	@property
-	def sqr_magnitude(self) -> float:
-		return self.x * self.x + self.y * self.y
-
 	@property
 	def x(self) -> int:
 		return self._x
@@ -252,48 +228,70 @@ class Vector2i:
 
 	# endregion properties
 
-	# region public_methods
+	# region methods
+	def angle(self, v2: Self | Vector2, use_radian: bool = False) -> float:
+		if not isinstance(v2, Vector2 | Vector2i):
+			raise TypeError(f"Cannot calculate angle between Vector2i and {v2.__class__.__name__}")
+		if self.x == self.y == 0 or v2.x == v2.y == 0:
+			return 0.0
+		if self == -v2:
+			return math.radians(180.0) if use_radian else 180.0
+		dot: float = self.dot(v2)
+		angle: float = math.acos(dot * dot / (self.sqr_magnitude() * v2.sqr_magnitude()))
+		return angle if use_radian else math.degrees(angle)
+
+	def dot(self, v2: Self | Vector2) -> float:
+		if not isinstance(v2, Vector2 | Vector2i):
+			raise TypeError(f"Can't use dot product between Vector2i and {v2.__class__.__name__}")
+		return self.x * v2.x + self.y * v2.y
+
+	def magnitude(self) -> float:
+		return math.sqrt(self.x * self.x + self.y * self.y)
+
 	def normalize(self) -> None:
 		if self != Vector2i(0, 0):
-			self.set(*(self / self.magnitude))
+			self.set(*(self / self.magnitude()))
+
+	def normalized(self) -> Self:
+		if self == Vector2i(0, 0):
+			return Vector2i(0, 0)
+		return self / self.magnitude()
 
 	def set(self, x: float | int, y: float | int) -> None:
 		self.x = int(x)
 		self.y = int(y)
 
+	def sqr_magnitude(self) -> float:
+		return self.x * self.x + self.y * self.y
+
 	def swap(self) -> Self:
 		return Vector2i(self.y, self.x)
-	# endregion public_methods
+
+	# endregion methods
 
 	# region static_methods
 	@staticmethod
-	def angle(v1: 'Self', v2: 'Self', use_radian: bool = False) -> float:
-		if not (isinstance(v1, Vector2i) and isinstance(v2, Vector2i)):
-			raise TypeError(f"Cannot calculate angle between {v1.__class__.__name__} and {v2.__class__.__name__}")
-		if v1.x == v1.y == 0 or v2.x == v2.y == 0:
-			return 0.0
-		if v1 == -v2:
-			return math.radians(180.0) if use_radian else 180.0
-		dot: float = Vector2i.dot(v1, v2)
-		angle: float = math.acos(dot * dot / (v1.sqr_magnitude * v2.sqr_magnitude))
-		return angle if use_radian else math.degrees(angle)
-
-	@staticmethod
-	def dot(v1: Self | Vector2, v2: Self | Vector2) -> float:
+	def max(v1, v2):
+		"""
+		Calculate the max x and max y of both vectors and return them in a Vector2i
+		:type v1: Vector2i | Vector2
+		:type v2: Vector2i | Vector2
+		:rtype: Vector2i
+		:return: The Vector2i with max_x and max_y
+		"""
 		if not (isinstance(v1, Vector2i | Vector2) and isinstance(v2, Vector2i | Vector2)):
-			raise TypeError(f"Can't use dot product between {v1.__class__.__name__} and {v2.__class__.__name__}")
-		return v1.x * v2.x + v1.y * v2.y
-
-	@staticmethod
-	def max(v1: Self | Vector2, v2: Self | Vector2) -> Self:
-		if not isinstance(v1, Vector2i | Vector2):
-			raise TypeError("Wrong argument for Vector2i.max, got " + v1.__class__.__name__ + " instead of Vector2i")
-		if not isinstance(v2, Vector2i | Vector2):
-			raise TypeError("Wrong argument for Vector2i.max, got " + v2.__class__.__name__ + " instead of Vector2i")
+			raise TypeError
 		return Vector2i(max(v1.x, v2.x), max(v1.y, v2.y))
 
 	@staticmethod
-	def min(v1: 'Self', v2: 'Self') -> 'Self':
+	def min(v1, v2):
+		"""
+		Calculate the min x and min y of both vectors and return them in a :class:`Vector2i`
+		:type v1: Vector2i | Vector2
+		:type v2: Vector2i | Vector2
+		:rtype: Vector2i
+		:return: The :class:`Vector2i` with min_x and min_y
+		"""
 		if not isinstance(v1, Vector2i | Vector2):
 			raise TypeError("Wrong argument for Vector2i.min, got " + v1.__class__.__name__ + " instead of Vector2i")
 		if not isinstance(v2, Vector2i | Vector2):
@@ -384,11 +382,15 @@ class Vector2i:
 		return [self.x, self.y].__iter__()
 
 	def __getitem__(self, item: int) -> int:
-		if not isinstance(item, int):
-			raise TypeError("Invalid index. Got " + item.__class__.__name__ + " instead of int")
-		if not -2 <= item <= 1:
-			raise IndexError("Vector2i index out of range")
-		return (self.x, self.y)[item]
+		if item == 'x':
+			return self.x
+		if item == 'y':
+			return self.y
+		if isinstance(item, int):
+			if -2 <= item <= 1:
+				return (self.x, self.y)[item]
+			raise IndexError
+		raise TypeError("Invalid index. Got " + item.__class__.__name__ + " instead of int")
 
 	def __eq__(self, other) -> bool:
 		return (other is self) or isinstance(other, Vector2i | Vector2) and math.isclose(self.x, other.x) and math.isclose(self.y, other.y)
@@ -400,6 +402,6 @@ class Vector2i:
 		return f"Vector2i({self.x}, {self.y})"
 
 	def __hash__(self):
-		return hash(self.__repr__())
+		return hash((self.x, self.y))
 	# endregion magic_methods
 	pass
